@@ -157,6 +157,79 @@ async function run() {
       }
     });
 
+    // Get tutors added by a specific user (Private Route)
+    app.get('/my-tutors', verifyToken, async (req, res) => {
+      try {
+        const email = req.query.email;
+        // Verify email from token matches query email
+        if (req.decoded.email !== email) {
+          return res.status(403).send({ error: true, message: 'Forbidden access: Email mismatch' });
+        }
+        const query = { email: email };
+        const result = await tutorsCollection.find(query).toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ error: true, message: error.message });
+      }
+    });
+
+    // Get bookings made by a specific user (Private Route)
+    app.get('/my-bookings', verifyToken, async (req, res) => {
+      try {
+        const email = req.query.email;
+        // Verify email from token matches query email
+        if (req.decoded.email !== email) {
+          return res.status(403).send({ error: true, message: 'Forbidden access: Email mismatch' });
+        }
+        const query = { userEmail: email };
+        const result = await bookingsCollection.find(query).toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ error: true, message: error.message });
+      }
+    });
+
+    // Cancel a Booking (Private Route)
+    app.patch('/bookings/:id/cancel', verifyToken, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const filter = { _id: new ObjectId(id) };
+
+        // Find booking to verify ownership and check status
+        const booking = await bookingsCollection.findOne(filter);
+        if (!booking) {
+          return res.status(404).send({ error: true, message: "Booking not found." });
+        }
+
+        // Verify the user owns the booking
+        if (req.decoded.email !== booking.userEmail) {
+          return res.status(403).send({ error: true, message: "Forbidden access: You do not own this booking." });
+        }
+
+        if (booking.status === "cancelled") {
+          return res.status(400).send({ error: true, message: "Booking is already cancelled." });
+        }
+
+        // Update status to cancelled
+        const updateDoc = {
+          $set: { status: "cancelled" }
+        };
+        const updateResult = await bookingsCollection.updateOne(filter, updateDoc);
+
+        // Restore tutor slot (+1)
+        if (booking.tutorId) {
+          await tutorsCollection.updateOne(
+            { _id: new ObjectId(booking.tutorId) },
+            { $inc: { totalSlot: 1 } }
+          );
+        }
+
+        res.send(updateResult);
+      } catch (error) {
+        res.status(500).send({ error: true, message: error.message });
+      }
+    });
+
     // Base route
     app.get('/', (req, res) => {
       res.send({ 
