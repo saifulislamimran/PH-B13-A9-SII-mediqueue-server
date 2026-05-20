@@ -46,12 +46,30 @@ async function run() {
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
 
     const db = client.db('mediQueue');
+    const tutorsCollection = db.collection('tutors');
     
     // Auth related API (JWT)
     app.post('/jwt', (req, res) => {
       const user = req.body;
       const token = jwt.sign(user, process.env.JWT_SECRET, { expiresIn: '1h' });
       res.send({ token });
+    });
+
+    // Add a Tutor (Private Route)
+    app.post('/tutors', verifyToken, async (req, res) => {
+      const tutor = req.body;
+      // Ensure numeric types for slot and price operations
+      if (tutor.price !== undefined) tutor.price = Number(tutor.price);
+      if (tutor.totalSlot !== undefined) tutor.totalSlot = Number(tutor.totalSlot);
+      
+      const result = await tutorsCollection.insertOne(tutor);
+      res.send(result);
+    });
+
+    // Get Home Tutors (Limit to 6)
+    app.get('/home-tutors', async (req, res) => {
+      const result = await tutorsCollection.find().limit(6).toArray();
+      res.send(result);
     });
 
     // Base route
