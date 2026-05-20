@@ -72,6 +72,35 @@ async function run() {
       res.send(result);
     });
 
+    // Get all Tutors with search and date range filtering
+    app.get('/tutors', async (req, res) => {
+      try {
+        const { search, startDate, endDate } = req.query;
+        const query = {};
+
+        // Case-insensitive name search using regex
+        if (search) {
+          query.name = { $regex: search, $options: 'i' };
+        }
+
+        // Date range filtering using $gte and $lte
+        if (startDate || endDate) {
+          query.sessionDate = {};
+          if (startDate) {
+            query.sessionDate.$gte = startDate;
+          }
+          if (endDate) {
+            query.sessionDate.$lte = endDate;
+          }
+        }
+
+        const result = await tutorsCollection.find(query).toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ error: true, message: error.message });
+      }
+    });
+
     // Base route
     app.get('/', (req, res) => {
       res.send({ 
