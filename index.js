@@ -48,6 +48,23 @@ async function run() {
     const db = client.db('mediQueue');
     const tutorsCollection = db.collection('tutors');
     const bookingsCollection = db.collection('bookings');
+    const usersCollection = db.collection('users');
+
+    // Admin Verification Middleware (must be called after verifyToken)
+    const verifyAdmin = async (req, res, next) => {
+      try {
+        const email = req.decoded.email;
+        const query = { email: email };
+        const user = await usersCollection.findOne(query);
+        const isAdmin = user?.role === 'admin';
+        if (!isAdmin) {
+          return res.status(403).send({ error: true, message: 'Forbidden access: Admin privilege required' });
+        }
+        next();
+      } catch (error) {
+        res.status(500).send({ error: true, message: error.message });
+      }
+    };
     
     // Auth related API (JWT)
     app.post('/jwt', (req, res) => {
@@ -225,6 +242,70 @@ async function run() {
         }
 
         res.send(updateResult);
+      } catch (error) {
+        res.status(500).send({ error: true, message: error.message });
+      }
+    });
+
+    // Create / Save a user (Standard User management)
+    app.post('/users', async (req, res) => {
+      try {
+        const user = req.body;
+        const query = { email: user.email };
+        const existingUser = await usersCollection.findOne(query);
+        if (existingUser) {
+          return res.send({ message: 'User already exists', insertedId: null });
+        }
+        const result = await usersCollection.insertOne(user);
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ error: true, message: error.message });
+      }
+    });
+
+    // Get Admin Dashboard Stats (Private Admin Route)
+    app.get('/admin-stats', verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const totalTutors = await tutorsCollection.countDocuments();
+        const totalBookings = await bookingsCollection.countDocuments();
+        const totalUsers = await usersCollection.countDocuments();
+
+        // Calculate total revenue from non-cancelled bookings
+        const revenueResult = await bookingsCollection.aggregate([
+          { $match: { status: { $ne: 'cancelled' } } },
+          { $group: { _id: null, totalRevenue: { $sum: '$price' } } }
+        ]).toArray();
+
+        const totalRevenue = revenueResult.length > 0 ? revenueResult[0].totalRevenue : 0;
+
+        res.send({
+          totalTutors,
+          totalBookings,
+          totalUsers,
+          totalRevenue
+        });
+      } catch (error) {
+        res.status(500).send({ error: true, message: error.message });
+      }
+    });
+
+    // Update Tutor Approval/Remove Status (Private Admin Route)
+    app.patch('/tutors/:id/status', verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const { status } = req.body; // e.g. "approved", "removed"
+
+        if (!status) {
+          return res.status(400).send({ error: true, message: "Status is required." });
+        }
+
+        const filter = { _id: new ObjectId(id) };
+        const updateDoc = {
+          $set: { status: status }
+        };
+
+        const result = await tutorsCollection.updateOne(filter, updateDoc);
+        res.send(result);
       } catch (error) {
         res.status(500).send({ error: true, message: error.message });
       }
