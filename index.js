@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config();
 
 const app = express();
@@ -47,6 +47,7 @@ async function run() {
 
     const db = client.db('mediQueue');
     const tutorsCollection = db.collection('tutors');
+    const bookingsCollection = db.collection('bookings');
     
     // Auth related API (JWT)
     app.post('/jwt', (req, res) => {
@@ -95,6 +96,54 @@ async function run() {
         }
 
         const result = await tutorsCollection.find(query).toArray();
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ error: true, message: error.message });
+      }
+    });
+
+    // Create a Booking (Private Route)
+    app.post('/bookings', verifyToken, async (req, res) => {
+      try {
+        const { tutorId, userEmail, tutorEmail, price, sessionDate } = req.body;
+
+        if (!tutorId) {
+          return res.status(400).send({ error: true, message: "Tutor ID is required." });
+        }
+
+        // Find tutor details
+        const tutor = await tutorsCollection.findOne({ _id: new ObjectId(tutorId) });
+        if (!tutor) {
+          return res.status(404).send({ error: true, message: "Tutor not found." });
+        }
+
+        // 1. Slot check: If tutor's totalSlot is 0, block booking
+        if (tutor.totalSlot === undefined || tutor.totalSlot <= 0) {
+          return res.status(400).send({ error: true, message: "Booking blocked: No slots available for this tutor." });
+        }
+
+        // 2. Date validation: If current date is earlier than session date, block the booking (as per instructions)
+        const currentDate = new Date();
+        const sessionDateObj = new Date(sessionDate || tutor.sessionDate);
+
+        if (currentDate < sessionDateObj) {
+          return res.status(400).send({ 
+            error: true, 
+            message: "Booking blocked: Current date is earlier than the session date." 
+          });
+        }
+
+        const newBooking = {
+          tutorId: new ObjectId(tutorId),
+          userEmail,
+          tutorEmail,
+          price: Number(price || tutor.price),
+          sessionDate: sessionDate || tutor.sessionDate,
+          status: "booked",
+          bookedAt: new Date()
+        };
+
+        const result = await bookingsCollection.insertOne(newBooking);
         res.send(result);
       } catch (error) {
         res.status(500).send({ error: true, message: error.message });
