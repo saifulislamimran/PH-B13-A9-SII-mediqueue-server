@@ -144,6 +144,13 @@ async function run() {
         };
 
         const result = await bookingsCollection.insertOne(newBooking);
+
+        // Automatically decrease the tutor's totalSlot by 1
+        await tutorsCollection.updateOne(
+          { _id: new ObjectId(tutorId) },
+          { $inc: { totalSlot: -1 } }
+        );
+
         res.send(result);
       } catch (error) {
         res.status(500).send({ error: true, message: error.message });
