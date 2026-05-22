@@ -3,6 +3,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const bcrypt = require('bcryptjs');
+const mongoose = require('mongoose');
 require('dotenv').config();
 
 const app = express();
@@ -11,6 +12,7 @@ const port = process.env.PORT || 5000;
 // Middleware
 const allowedOrigins = [
   'http://localhost:5173',
+  'https://ph-b13-a9-sii-medi-queue.vercel.app',
   process.env.FRONTEND_URL
 ].filter(Boolean);
 
@@ -50,6 +52,12 @@ const verifyToken = (req, res, next) => {
 
 // MongoDB URI & Client Setup
 const uri = process.env.DB_URI;
+
+// Connect via Mongoose
+mongoose.connect(uri)
+  .then(() => console.log("Mongoose connected successfully to MongoDB!"))
+  .catch(err => console.error("Mongoose connection error:", err));
+
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
